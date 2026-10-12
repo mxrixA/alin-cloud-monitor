@@ -1,47 +1,85 @@
-name: ALin offer monitor
+name: ALin API diagnostic
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: alin-monitor
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  check:
+  diagnostic:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 3
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Python dependencies
-        run: python -m pip install --no-cache-dir -r requirements.txt
-
-      - name: Check ALin offers
+      - name: Test official ALin user API flow
         env:
           ALIN_EMAIL: ${{ secrets.ALIN_EMAIL }}
           ALIN_PASSWORD: ${{ secrets.ALIN_PASSWORD }}
-          ALIN_OFFERS_URL: ${{ secrets.ALIN_OFFERS_URL }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          FORCE_RESUME: '0'
-        run: xxd -r -p monitor.py.gz.hex | gzip -d > /tmp/monitor.py && python /tmp/monitor.py
-
-      - name: Persist anonymous monitor state
-        if: always()
         run: |
-          git config user.name "alin-monitor[bot]"
-          git config user.email "alin-monitor-bot@users.noreply.github.com"
-          git add state.json
-          if ! git diff --cached --quiet; then
-            git commit -m "Update monitor state [skip ci]"
-            git push
-          fi
+          python - -&lt;'PY'
+          import datetime
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          email = os.environ['ALIN_EMAIL']
+          password = os.environ['ALIN_PASSWORD']
+          auth_url = 'https://api.be-ys.com/als-back/v1/accounts/authenticate'
+          exchange_url = 'https://api.al-in.fr/api/token_exchange/als_hermes_salarie'
+          offers_url = 'https://api.al-in.fr/api/dmo/housing_offers'
+          api_key = '7d6bfa55-4632-41ed-bddd-597866ebbfb5'
+
+          def request_json(url, method='GET', payload=None, headers=None):
+              body = None
+              request_headers = dict(headers or {})
+              if payload is not None:
+                  body = json.dumps(payload).encode('utf-8')
+                  request_headers['Content-Type'] = 'application/json'
+              req = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return json.loads(response.read().decode('utf-8'))
+              except urllib.error.HTTPError as exc:
+                  raise RuntimeError(f'ALin HTTP error {exc.code} at {urllib.parse.urlsplit(url).path}') from None
+
+          auth = request_json(
+              auth_url,
+              method='POST',
+              payload={'login': email, 'password': password},
+              headers={'X-GeXRT-API-Key': api_key},
+          )
+          access_token = auth.get('access_token')
+          if not access_token:
+              raise RuntimeError('ALin authentication returned no access token')
+          print('::add-mask::' + access_token)
+
+          exchanged = request_json(
+              exchange_url,
+              method='POST',
+              payload={'access_token': access_token},
+          )
+          jwt_token = exchanged.get('jwt_token')
+          if not jwt_token:
+              raise RuntimeError('ALin token exchange returned no JWT')
+          print('::add-mask::' + jwt_token)
+
+          today = datetime.date.today()
+          yesterday = today - datetime.timedelta(days=1)
+          params = urllib.parse.urlencode({
+              'per_page': '100',
+              'page': '1',
+              'publication_end_date[$gte]': yesterday.isoformat(),
+              'date_publication_start[$lte]': today.isoformat(),
+          })
+          offers = request_json(
+              offers_url + '?' + params,
+              headers={'Authorization': 'Bearer ' + jwt_token},
+          )
+          rows = offers.get('data') or []
+          print(f'ALIN_API_OK offers_returned={len(rows)}')
+          PY
