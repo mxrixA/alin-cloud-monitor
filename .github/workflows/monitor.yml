@@ -1,4 +1,4 @@
-name: ALin offer monitor
+  name: ALin offer monitor
 
 on:
   workflow_dispatch:
