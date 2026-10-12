@@ -41,7 +41,7 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           HEADLESS: '1'
           FORCE_RESUME: ${{ inputs.resume && '1' || '0' }}
-        run: python monitor.py
+        run: base64 -d monitor.py.gz.b64 | gzip -d > /tmp/monitor.py && python /tmp/monitor.py
 
       - name: Persist anonymous monitor state
         if: always()
