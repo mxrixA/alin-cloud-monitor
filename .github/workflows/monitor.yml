@@ -1,13 +1,10 @@
-  name: ALin offer monitor
+name: ALin offer monitor
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      resume:
-        description: 'Resume after fixing an authentication problem'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -35,12 +32,11 @@ jobs:
           ALIN_PASSWORD: ${{ secrets.ALIN_PASSWORD }}
           ALIN_OFFERS_URL: ${{ secrets.ALIN_OFFERS_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          FORCE_RESUME: ${{ inputs.resume && '1' || '0' }}
+          FORCE_RESUME: '0'
         run: xxd -r -p monitor.py.gz.hex | gzip -d > /tmp/monitor.py && python /tmp/monitor.py
 
       - name: Persist anonymous monitor state
         if: always()
-        working-directory: ${{ github.workspace }}
         run: |
           git config user.name "alin-monitor[bot]"
           git config user.email "alin-monitor-bot@users.noreply.github.com"
