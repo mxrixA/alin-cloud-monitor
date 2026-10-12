@@ -20,8 +20,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 4
-    container:
-      image: mcr.microsoft.com/playwright/python:v1.55.0-noble
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -37,13 +35,12 @@ jobs:
           ALIN_PASSWORD: ${{ secrets.ALIN_PASSWORD }}
           ALIN_OFFERS_URL: ${{ secrets.ALIN_OFFERS_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          HEADLESS: '1'
           FORCE_RESUME: ${{ inputs.resume && '1' || '0' }}
-        run: base64 -d monitor.py.gz.b64 | gzip -d > /tmp/monitor.py && python /tmp/monitor.py
+        run: xxd -r -p monitor.py.gz.hex | gzip -d > /tmp/monitor.py && python /tmp/monitor.py
 
       - name: Persist anonymous monitor state
         if: always()
-        working-directory: /__w/alin-cloud-monitor/alin-cloud-monitor
+        working-directory: ${{ github.workspace }}
         run: |
           git config user.name "alin-monitor[bot]"
           git config user.email "alin-monitor-bot@users.noreply.github.com"
